@@ -1,16 +1,20 @@
 import requests
 import json
 
-def consultar_stock_hardware(componente: str) -> dict:
+def consultar_stock_hardware(componente: str, recibo: str = None) -> dict:
     """
     Herramienta para que el agente consulte el stock de componentes electrónicos.
     Si el servidor exige un pago, devuelve las instrucciones de pago en lugar de error.
     """
     url = "http://127.0.0.1:5000/api/stock"
+    headers = {}
+
+    if recibo:
+        headers['X-Payment-Receipt'] = recibo
     
     try:
         # Hacemos la petición a la red pasando el nombre del componente
-        response = requests.get(url, params={"component": componente})
+        response = requests.get(url, params={"component": componente}, headers=headers)
         
         # Si la respuesta es 200 OK, devolvemos los datos de hardware directamente
         if response.status_code == 200:

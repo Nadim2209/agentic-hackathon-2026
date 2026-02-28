@@ -1,13 +1,11 @@
 import json
 from tools import consultar_stock_hardware
+from payments import procesar_pago_x402
 
 def ejecutar_cazador_de_recompensas():
     print(" Inicializando OpenClaw Bounty Hunter...")
     print(" Misión: Buscar stock crítico de hardware y sortear muros de pago M2M.\n")
 
-    # El usuario lanza la petición
-    prompt_usuario = "Necesito saber el stock exacto de la FPGA_Xilinx. Si el proveedor exige un pago por la consulta, dime cuánto cuesta y a qué wallet debo pagar."
-    print(f" Usuario: {prompt_usuario}\n")
 
     # El agente piensa usa 'consultar_stock_hardware'
     print(" Agente: Entendido. Llamando a la red del proveedor a través de la herramienta 'consultar_stock_hardware'...")
@@ -18,16 +16,36 @@ def ejecutar_cazador_de_recompensas():
     
     if resultado.get("status") == "payment_required":
         instrucciones = resultado["instructions"]
+
+        # El servidor ha denegado el acceso
         print(" Agente: ¡Alto! El servidor me ha devuelto un error HTTP 402.")
         print(f" Agente: Para desbloquear los datos de la FPGA, necesito transferir {instrucciones['amount_usdc']} USDC.")
-        print(f" Destino: Wallet {instrucciones['destination_wallet']} (Red: {instrucciones['network']}).")
-        print("\n Agente: Derivando la ejecución al módulo de pagos x402...")
-        
+
+        # Delegamos la firma y el envío del micropago a la capa de transacciones
+        resultado_pago = procesar_pago_x402(instrucciones)
+        if resultado_pago.get("status") == "success":
+            
+            # Tenemos el token de acceso
+            recibo_cripto = resultado_pago["receipt"]
+            print(f"\n Agente: Reintentando la petición inyectando el recibo en la cabecera HTTP...")
+            
+            # Reintento de la petición inyectando el recibo en las cabeceras HTTP
+            resultado_final = consultar_stock_hardware("FPGA_Xilinx", recibo=recibo_cripto)
+            
+            # Evaluación final del payload recuperado
+            if resultado_final.get("status") == "success":
+                print("\n Agente: ¡Muro superado! Datos de hardware recuperados:")
+                print(json.dumps(resultado_final['data']['data'], indent=2))
+                print("\n MISIÓN CUMPLIDA. Devolviendo control al usuario.")
+            else:
+                print(f" Agente: Fallo en el segundo intento - {resultado_final.get('message')}")
     elif resultado.get("status") == "success":
-        print(f" Agente: ¡Éxito! Los datos obtenidos son: {json.dumps(resultado['data'], indent=2)}")
+        # El recurso era público o el servidor no exigió pago
+        print(f" Agente: Datos recuperados a la primera: {json.dumps(resultado['data'], indent=2)}")
         
     else:
-        print(f" Agente: Ha ocurrido un error inesperado: {resultado.get('message')}")
+        # Manejo de excepciones de red no controladas
+        print(f" Agente: Excepción capturada - {resultado.get('message')}")
 
 if __name__ == "__main__":
     ejecutar_cazador_de_recompensas()
